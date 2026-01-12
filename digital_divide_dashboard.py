@@ -23,6 +23,39 @@ except ImportError:
     HAS_SCIPY = False
 warnings.filterwarnings('ignore')
 
+# Helper function for Nepal numbering format (00,00,000)
+def format_nepal_number(num):
+    """
+    Format number in Nepal/Indian numbering system (00,00,000 format)
+    Examples: 100000 -> 1,00,000 | 1000000 -> 10,00,000 | 10000000 -> 1,00,00,000
+    """
+    if pd.isna(num) or num == 0:
+        return "0"
+    
+    num = int(num)
+    num_str = str(num)
+    
+    # Handle negative numbers
+    negative = False
+    if num < 0:
+        negative = True
+        num_str = num_str[1:]
+    
+    # Nepal numbering: first 3 digits from right, then groups of 2
+    if len(num_str) <= 3:
+        result = num_str
+    else:
+        # Last 3 digits
+        result = num_str[-3:]
+        num_str = num_str[:-3]
+        
+        # Then groups of 2
+        while num_str:
+            result = num_str[-2:] + ',' + result
+            num_str = num_str[:-2]
+    
+    return ('-' if negative else '') + result
+
 # Page configuration
 st.set_page_config(
     page_title="Digital Divide Nepal Dashboard",
@@ -769,34 +802,6 @@ def create_custom_visualization(df_combined, districts, metric, chart_type, year
                 fig.update_layout(height=600, showlegend=True,
                                 legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.01))
         
-        elif chart_type == "Histogram":
-            # Enhanced histogram with better styling and statistics
-            # Filter out invalid values
-            valid_data = data[data[metric].notna() & (data[metric] >= 0) & (data[metric] <= 100)]
-            if valid_data.empty:
-                fig = go.Figure()
-                fig.add_annotation(text="No valid data available for histogram", 
-                                  xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-                return fig
-            
-            fig = px.histogram(valid_data, x=metric, nbins=25,
-                             title=f"Distribution of {metric.replace('_', ' ').title()}",
-                             color_discrete_sequence=['#FF6B6B'],
-                             marginal="box")  # Add box plot on top
-            
-            # Add statistical information with safe calculations
-            mean_val = safe_mean(valid_data[metric], 0.0)
-            median_val = valid_data[metric].median() if not valid_data.empty else 0.0
-            if pd.isna(median_val):
-                median_val = 0.0
-            
-            fig.add_vline(x=mean_val, line_dash="dash", line_color="blue", 
-                         annotation_text=f"Mean: {mean_val:.1f}%")
-            fig.add_vline(x=median_val, line_dash="dash", line_color="green", 
-                         annotation_text=f"Median: {median_val:.1f}%")
-            
-            fig.update_layout(height=500, bargap=0.1)
-        
         elif chart_type == "Box Plot":
             # Enhanced vertical box plot
             fig = px.box(data, y='District', x=metric, color='Urban_Rural',
@@ -812,58 +817,6 @@ def create_custom_visualization(df_combined, districts, metric, chart_type, year
             
             # Add statistical annotations
             fig.update_traces(boxpoints="outliers", jitter=0.3, pointpos=-1.8)
-        
-        elif chart_type == "Scatter Plot":
-            # Filter out invalid values
-            valid_data = data[data[metric].notna() & (data[metric] >= 0) & (data[metric] <= 100)].copy()
-            if valid_data.empty:
-                fig = go.Figure()
-                fig.add_annotation(text="No valid data available for scatter plot", 
-                                  xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-                return fig
-            
-            if 'Total_Population' in valid_data.columns:
-                # Validate population data
-                valid_data = valid_data[valid_data['Total_Population'] > 0]
-                size_col = None
-                if 'Literacy_Rate_Total' in valid_data.columns:
-                    valid_literacy = valid_data[valid_data['Literacy_Rate_Total'].notna() & 
-                                               (valid_data['Literacy_Rate_Total'] >= 0) & 
-                                               (valid_data['Literacy_Rate_Total'] <= 100)]
-                    if not valid_literacy.empty:
-                        size_col = 'Literacy_Rate_Total'
-                
-                fig = px.scatter(valid_data, x='Total_Population', y=metric, color='District',
-                               size=size_col,
-                               title=f"{metric.replace('_', ' ').title()} vs Population",
-                               color_discrete_sequence=px.colors.qualitative.Set1)
-            else:
-                fig = px.scatter(valid_data, x='Year', y=metric, color='District',
-                               title=f"{metric.replace('_', ' ').title()} Over Time")
-        
-        elif chart_type == "Heatmap":
-            # Filter valid data before pivot
-            valid_data = data[data[metric].notna() & (data[metric] >= 0) & (data[metric] <= 100)]
-            if valid_data.empty:
-                fig = go.Figure()
-                fig.add_annotation(text="No valid data available for heatmap", 
-                                  xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-                return fig
-            
-            # Use safe aggregation function
-            pivot_data = valid_data.pivot_table(
-                values=metric, 
-                index='District', 
-                columns='Year', 
-                aggfunc=lambda x: safe_mean(x, 0.0)
-            )
-            # Fill NaN with 0 for display
-            pivot_data = pivot_data.fillna(0).clip(lower=0, upper=100)
-            
-            fig = px.imshow(pivot_data, 
-                           title=f"{metric.replace('_', ' ').title()} Heatmap",
-                           color_continuous_scale='Viridis',
-                           zmin=0, zmax=100)  # Set fixed range for consistency
         
         else:  # Line Chart (default)
             plot_data = data.groupby(['District', 'Year'])[metric].apply(safe_mean, default=0.0).reset_index()
@@ -1692,45 +1645,6 @@ def create_advanced_visualization(df_combined, districts, metrics, chart_type, y
                 )
                 fig.update_layout(height=600)
         
-        elif chart_type == "Treemap":
-            # Enhanced treemap visualization
-            if len(metrics) >= 1 and 'Total_Population' in data.columns:
-                metric = metrics[0]
-                # Use safe aggregation with proper validation
-                plot_data = data.groupby('District').agg({
-                    metric: lambda x: safe_mean(x, 0.0),
-                    'Total_Population': 'sum'
-                }).reset_index()
-                plot_data[metric] = plot_data[metric].clip(lower=0, upper=100)  # Ensure valid range
-                plot_data = plot_data[plot_data['Total_Population'] > 0]  # Remove invalid population
-                
-                # Create color values based on the metric
-                fig = go.Figure(go.Treemap(
-                    labels=plot_data['District'],
-                    values=plot_data['Total_Population'],
-                    parents=[""] * len(plot_data),
-                    textinfo="label+value+percent parent",
-                    marker=dict(
-                        colorscale='RdYlBu_r',
-                        colorbar=dict(title=f"{metric.replace('_', ' ').title()} (%)"),
-                        coloraxis="coloraxis"
-                    ),
-                    text=[f"{district}<br>Pop: {pop:,}<br>{metric.replace('_', ' ')}: {val:.1f}%" 
-                          for district, pop, val in zip(plot_data['District'], plot_data['Total_Population'], plot_data[metric])],
-                    hovertemplate="<b>%{label}</b><br>Population: %{value:,}<br>" + 
-                                f"{metric.replace('_', ' ')}: %{{color:.1f}}%<extra></extra>"
-                ))
-                
-                fig.update_layout(
-                    title=f"Population Treemap colored by {metric.replace('_', ' ').title()}",
-                    coloraxis=dict(colorscale='RdYlBu_r', cmin=plot_data[metric].min(), cmax=plot_data[metric].max()),
-                    height=600
-                )
-            else:
-                fig = go.Figure()
-                fig.add_annotation(text="Population data or metrics not available for treemap", 
-                                  xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-        
         elif chart_type == "Waterfall Chart":
             # Enhanced waterfall chart showing changes over time
             if len(data['Year'].unique()) > 1 and len(metrics) >= 1:
@@ -1880,51 +1794,6 @@ def create_advanced_visualization(df_combined, districts, metrics, chart_type, y
                 
                 fig.update_layout(height=500, title="Multi-Metric Distribution")
         
-        elif chart_type == "Histogram":
-            # Enhanced histogram
-            if len(metrics) == 1:
-                metric = metrics[0]
-                fig = px.histogram(data, x=metric, nbins=25,
-                                 title=f"Distribution of {metric.replace('_', ' ').title()}",
-                                 color_discrete_sequence=['#FF6B6B'],
-                                 marginal="box")
-                
-                # Filter valid data and add statistical information
-                valid_data = data[data[metric].notna() & (data[metric] >= 0) & (data[metric] <= 100)]
-                if valid_data.empty:
-                    fig = go.Figure()
-                    fig.add_annotation(text="No valid data available for histogram", 
-                                      xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-                    return fig
-                
-                mean_val = safe_mean(valid_data[metric], 0.0)
-                median_val = valid_data[metric].median() if not valid_data.empty else 0.0
-                if pd.isna(median_val):
-                    median_val = 0.0
-                
-                fig.add_vline(x=mean_val, line_dash="dash", line_color="blue", 
-                             annotation_text=f"Mean: {mean_val:.1f}%")
-                fig.add_vline(x=median_val, line_dash="dash", line_color="green", 
-                             annotation_text=f"Median: {median_val:.1f}%")
-                
-                fig.update_layout(height=500, bargap=0.1)
-            else:
-                # Multiple metrics - create subplots
-                fig = make_subplots(
-                    rows=len(metrics), cols=1,
-                    subplot_titles=[f"{metric.replace('_', ' ').title()}" for metric in metrics]
-                )
-                
-                for i, metric in enumerate(metrics):
-                    fig.add_trace(go.Histogram(
-                        x=data[metric],
-                        name=metric.replace('_', ' ').title(),
-                        nbinsx=20,
-                        marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'][i % 4]
-                    ), row=i+1, col=1)
-                
-                fig.update_layout(height=300*len(metrics), title="Multi-Metric Distributions")
-        
         elif chart_type == "Box Plot":
             # Enhanced box plot
             if len(metrics) == 1:
@@ -1958,60 +1827,6 @@ def create_advanced_visualization(df_combined, districts, metrics, chart_type, y
                     ), row=1, col=i+1)
                 
                 fig.update_layout(height=600, title="Multi-Metric Box Plot Analysis")
-        
-        elif chart_type == "Scatter Plot":
-            # Enhanced scatter plot
-            if len(metrics) >= 2:
-                fig = px.scatter(data, x=metrics[0], y=metrics[1], 
-                               color='District', size='Total_Population' if 'Total_Population' in data.columns else None,
-                               title=f"{metrics[0].replace('_', ' ').title()} vs {metrics[1].replace('_', ' ').title()}",
-                               color_discrete_sequence=px.colors.qualitative.Set1)
-                
-                # Add trend line
-                fig.add_trace(go.Scatter(
-                    x=data[metrics[0]], y=data[metrics[1]],
-                    mode='lines',
-                    name='Trend Line',
-                    line=dict(color='red', dash='dash'),
-                    showlegend=False
-                ))
-            else:
-                fig = px.scatter(data, x='Year', y=metrics[0], color='District',
-                               title=f"{metrics[0].replace('_', ' ').title()} Over Time")
-        
-        elif chart_type == "Heatmap":
-            # Create correlation heatmap or temporal heatmap
-            if len(metrics) > 1:
-                # Correlation heatmap
-                correlation_data = data[metrics].corr()
-                fig = px.imshow(correlation_data, 
-                               title="Metric Correlation Heatmap",
-                               color_continuous_scale='RdBu',
-                               aspect="auto")
-                fig.update_layout(height=500)
-            else:
-                # Temporal heatmap for single metric with proper validation
-                valid_data = data[data[metrics[0]].notna() & (data[metrics[0]] >= 0) & (data[metrics[0]] <= 100)]
-                if valid_data.empty:
-                    fig = go.Figure()
-                    fig.add_annotation(text="No valid data available for heatmap", 
-                                      xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-                    return fig
-                
-                pivot_data = valid_data.pivot_table(
-                    values=metrics[0], 
-                    index='District', 
-                    columns='Year', 
-                    aggfunc=lambda x: safe_mean(x, 0.0)
-                )
-                # Fill NaN with 0 and ensure valid range
-                pivot_data = pivot_data.fillna(0).clip(lower=0, upper=100)
-                fig = px.imshow(pivot_data, 
-                               title=f"{metrics[0].replace('_', ' ').title()} Heatmap Over Time",
-                               color_continuous_scale='Viridis',
-                               aspect="auto",
-                               zmin=0, zmax=100)  # Set fixed range for consistency
-                fig.update_layout(height=max(400, len(pivot_data) * 30))
         
         elif chart_type == "Line Chart":
             # Enhanced line chart
@@ -2711,9 +2526,8 @@ def main():
                 chart_type = st.selectbox(
                     "Choose Visualization Type:",
                     ["Line Chart", "Bar Chart", "Advanced Bar Chart", "Pie Chart", 
-                     "Histogram", "Box Plot", "Scatter Plot", "Heatmap", 
-                     "3D Scatter Plot", "Radar Chart", "Gantt Chart",
-                     "Sunburst Chart", "Treemap", "Waterfall Chart"],
+                     "Box Plot", "3D Scatter Plot", "Radar Chart",
+                     "Sunburst Chart", "Waterfall Chart"],
                     help="Select the type of chart for your analysis"
                 )
             
@@ -2958,35 +2772,19 @@ def main():
         with col1:
             if not district1_data.empty:
                 total_pop = district1_data['Total_Population'].sum()
-                male_pop = district1_data['Male'].sum()
-                female_pop = district1_data['Female'].sum()
-                
-                # Safe division for percentages
-                male_pct = safe_divide(male_pop, total_pop, 0.0) * 100 if total_pop > 0 else 0.0
-                female_pct = safe_divide(female_pop, total_pop, 0.0) * 100 if total_pop > 0 else 0.0
                 
                 st.info(f"""
                 **{district1} Population ({selected_year})**
-                - Total: {total_pop:,}
-                - Male: {male_pop:,} ({male_pct:.1f}%)
-                - Female: {female_pop:,} ({female_pct:.1f}%)
+                - Total: {format_nepal_number(total_pop)}
                 """)
         
         with col2:
             if not district2_data.empty:
                 total_pop = district2_data['Total_Population'].sum()
-                male_pop = district2_data['Male'].sum()
-                female_pop = district2_data['Female'].sum()
-                
-                # Safe division for percentages
-                male_pct = safe_divide(male_pop, total_pop, 0.0) * 100 if total_pop > 0 else 0.0
-                female_pct = safe_divide(female_pop, total_pop, 0.0) * 100 if total_pop > 0 else 0.0
                 
                 st.info(f"""
                 **{district2} Population ({selected_year})**
-                - Total: {total_pop:,}
-                - Male: {male_pop:,} ({male_pct:.1f}%)
-                - Female: {female_pop:,} ({female_pct:.1f}%)
+                - Total: {format_nepal_number(total_pop)}
                 """)
     
     elif analysis_type == "Comparative Analysis":
@@ -3709,15 +3507,10 @@ def main():
                 "Line Chart": "📈 Perfect for showing trends over time",
                 "Advanced Bar Chart": "📊 Multi-metric comparison with subplots",
                 "Pie Chart": "🥧 Distribution visualization for single metrics",
-                "Histogram": "📊 Data distribution analysis",
                 "Box Plot": "📦 Statistical distribution with outliers",
-                "Scatter Plot": "🔵 Relationship between two variables",
-                "Heatmap": "🌡️ Matrix visualization for correlations",
                 "3D Scatter Plot": "🎯 Three-dimensional data exploration",
                 "Radar Chart": "🕸️ Multi-metric comparison across districts",
-                "Gantt Chart": "📅 Project timeline for digital development",
                 "Sunburst Chart": "☀️ Hierarchical data visualization",
-                "Treemap": "🗺️ Hierarchical data with size encoding",
                 "Waterfall Chart": "💧 Sequential changes over time"
             }
             
@@ -4510,8 +4303,8 @@ def main():
                 st.markdown("### 📋 Detailed Budget Allocation")
                 
                 for i, result in enumerate(allocation_results):
-                    priority_class = "priority-high" if i < 2 else "priority-medium" if i < 4 else "priority-low"
-                    priority_label = "🔴 High" if i < 2 else "🟡 Medium" if i < 4 else "🟢 Low"
+                    priority_class = "priority-high" if i < 3 else "priority-medium" if i < 6 else "priority-low"
+                    priority_label = "🔴 Critical" if i < 3 else "🟡 High" if i < 6 else "🟢 Standard"
                     
                     st.markdown(f"""
                     <div class="{priority_class}">
@@ -5220,6 +5013,86 @@ def main():
                 st.markdown(f"**{selected_year} Data (All Districts)**")
                 st.markdown(create_download_link(year_filtered_data, f"nepal_digital_divide_{selected_year}", "CSV"), unsafe_allow_html=True)
                 st.write(f"Records: {len(year_filtered_data)}")
+        
+        # Total Population Data for All Districts (2001-2021) with Urban/Rural breakdown
+        if df_combined is not None and not df_combined.empty:
+            st.markdown("---")
+            st.markdown("#### 📊 Total Population by District (2001-2021)")
+            
+            # Get population data with Urban/Rural breakdown
+            pop_data = df_combined.groupby(['District', 'Year', 'Urban_Rural'])['Total_Population'].sum().reset_index()
+            
+            # Create a comprehensive table with Total, Urban, and Rural for each year
+            districts = sorted(df_combined['District'].unique())
+            table_data = []
+            
+            for district in districts:
+                row = {'District': district}
+                
+                for year in [2001, 2011, 2021]:
+                    year_data = pop_data[(pop_data['District'] == district) & (pop_data['Year'] == year)]
+                    
+                    # Get urban and rural populations
+                    urban_pop = year_data[year_data['Urban_Rural'] == 'Urban']['Total_Population'].sum()
+                    rural_pop = year_data[year_data['Urban_Rural'] == 'Rural']['Total_Population'].sum()
+                    total_pop = urban_pop + rural_pop
+                    
+                    # Store as formatted strings
+                    row[f'{year}_Total'] = format_nepal_number(total_pop)
+                    row[f'{year}_Urban'] = format_nepal_number(urban_pop)
+                    row[f'{year}_Rural'] = format_nepal_number(rural_pop)
+                
+                table_data.append(row)
+            
+            # Create DataFrame
+            pop_table = pd.DataFrame(table_data)
+            
+            # Reorder columns: District, 2001 Total, 2001 Urban, 2001 Rural, 2011 Total, 2011 Urban, 2011 Rural, 2021 Total, 2021 Urban, 2021 Rural
+            column_order = ['District']
+            for year in [2001, 2011, 2021]:
+                column_order.extend([f'{year}_Total', f'{year}_Urban', f'{year}_Rural'])
+            
+            pop_table = pop_table[column_order]
+            
+            # Calculate totals for each year and category
+            total_row = {'District': '**Total (All Districts)**'}
+            for year in [2001, 2011, 2021]:
+                year_data = pop_data[pop_data['Year'] == year]
+                urban_total = year_data[year_data['Urban_Rural'] == 'Urban']['Total_Population'].sum()
+                rural_total = year_data[year_data['Urban_Rural'] == 'Rural']['Total_Population'].sum()
+                total_all = urban_total + rural_total
+                
+                total_row[f'{year}_Total'] = format_nepal_number(total_all)
+                total_row[f'{year}_Urban'] = format_nepal_number(urban_total)
+                total_row[f'{year}_Rural'] = format_nepal_number(rural_total)
+            
+            # Add total row
+            total_df = pd.DataFrame([total_row])
+            pop_table = pd.concat([pop_table, total_df], ignore_index=True)
+            
+            # Rename columns for better display
+            pop_table.columns = ['District', '2001 Total', '2001 Urban', '2001 Rural', 
+                                '2011 Total', '2011 Urban', '2011 Rural',
+                                '2021 Total', '2021 Urban', '2021 Rural']
+            
+            # Style the population table
+            styled_pop = pop_table.style.set_properties(**{
+                'background-color': '#f8f9fa',
+                'color': '#333',
+                'border': '1px solid #dee2e6',
+                'text-align': 'right'
+            }).set_table_styles([
+                {'selector': 'th', 'props': [('background-color', '#e9ecef'), ('font-weight', 'bold'), ('text-align', 'center')]},
+                {'selector': 'td:first-child', 'props': [('font-weight', 'bold'), ('color', '#0066cc'), ('text-align', 'left')]},
+                {'selector': 'td', 'props': [('text-align', 'right')]},
+                {'selector': f'tr:last-child td', 'props': [('background-color', '#fff3cd'), ('font-weight', 'bold'), ('border-top', '2px solid #856404')]}
+            ])
+            
+            st.dataframe(
+                styled_pop,
+                use_container_width=True,
+                height=min(400, len(pop_table) * 35 + 100)
+            )
         
         # Data dictionary
         st.markdown("### 📖 Data Dictionary")
