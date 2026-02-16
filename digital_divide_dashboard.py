@@ -2963,7 +2963,12 @@ def main():
                         df_combined, district1, metric, prediction_years, model_type, confidence_level
                     )
                     if predictions is not None and len(predictions) > 0:
-                        current_val = df_combined[df_combined['District'] == district1][metric].iloc[-1] if not df_combined[df_combined['District'] == district1].empty else 0
+                        # Get the correct district average for 2021 (matching model training data)
+                        district_2021 = df_combined[(df_combined['District'] == district1) & (df_combined['Year'] == 2021)]
+                        if not district_2021.empty:
+                            current_val = district_2021[metric].mean()  # Average of urban+rural
+                        else:
+                            current_val = df_combined[df_combined['District'] == district1][metric].iloc[-1] if not df_combined[df_combined['District'] == district1].empty else 0
                         predicted_val = predictions[-1]
                         change = predicted_val - current_val
                         
@@ -3002,7 +3007,12 @@ def main():
                         df_combined, district2, metric, prediction_years, model_type, confidence_level
                     )
                     if predictions is not None and len(predictions) > 0:
-                        current_val = df_combined[df_combined['District'] == district2][metric].iloc[-1] if not df_combined[df_combined['District'] == district2].empty else 0
+                        # Get the correct district average for 2021 (matching model training data)
+                        district_2021 = df_combined[(df_combined['District'] == district2) & (df_combined['Year'] == 2021)]
+                        if not district_2021.empty:
+                            current_val = district_2021[metric].mean()  # Average of urban+rural
+                        else:
+                            current_val = df_combined[df_combined['District'] == district2][metric].iloc[-1] if not df_combined[df_combined['District'] == district2].empty else 0
                         predicted_val = predictions[-1]
                         change = predicted_val - current_val
                         
@@ -3107,10 +3117,17 @@ def main():
                         lower = confidence_bounds['lower'][-1] if len(confidence_bounds['lower']) > 0 else predictions[-1]
                         conf_range = f"[{lower:.1f}-{upper:.1f}]"
                     
+                    # Get the correct district average for 2021 (matching model training data)
+                    district_2021 = df_combined[(df_combined['District'] == district) & (df_combined['Year'] == 2021)]
+                    if not district_2021.empty:
+                        current_val_display = district_2021[metric].mean()  # Average of urban+rural
+                    else:
+                        current_val_display = df_combined[df_combined['District'] == district][metric].iloc[-1] if not df_combined[df_combined['District'] == district].empty else 0
+                    
                     summary_data.append({
                         'District': district,
                         'Metric': metric.replace('_', ' ').title(),
-                        f'Current (%)': f"{df_combined[df_combined['District'] == district][metric].iloc[-1]:.1f}" if not df_combined[df_combined['District'] == district].empty else "N/A",
+                        f'Current (%)': f"{current_val_display:.1f}" if current_val_display else "N/A",
                         f'Predicted {prediction_years}yr (%)': f"{predictions[-1]:.1f} {conf_range}",
                         'Growth (%)': f"{predictions[-1] - predictions[0]:+.1f}",
                         'Model R²': f"{r2:.3f}",
