@@ -23,7 +23,7 @@ except ImportError:
     HAS_SCIPY = False
 warnings.filterwarnings('ignore')
 
-# Helper function for Nepal numbering format (00,00,000)
+# Helper function  numbering format 
 def format_nepal_number(num):
     """
     Format number in Nepal/Indian numbering system (00,00,000 format)
@@ -2041,9 +2041,9 @@ def generate_prescriptive_recommendations(df_combined, district):
     if avg_telephone < 40:
         recommendations.append(f"📞 **TELECOM INFRASTRUCTURE ({avg_telephone:.1f}%)**: Low telephone access indicates poor telecom infrastructure. Recommend: (1) Mobile network expansion, (2) Affordable smartphone programs, (3) Telecom tower installation in coverage gaps.")
     
-    # Priority 6: Leverage Existing Infrastructure
+    # Priority 6: Utilize Existing Infrastructure
     if avg_tv > 60 and avg_internet < 40:
-        recommendations.append(f"📺 **STRATEGIC OPPORTUNITY**: High TV penetration ({avg_tv:.1f}%) indicates good infrastructure. Leverage existing cable networks for internet delivery. Partner with cable operators for hybrid fiber-coaxial (HFC) internet services.")
+        recommendations.append(f"📺 **STRATEGIC OPPORTUNITY**: High TV penetration ({avg_tv:.1f}%) indicates good infrastructure. Utilize existing cable networks for internet delivery. Partner with cable operators for hybrid fiber-coaxial (HFC) internet services.")
     
     if avg_radio > 60 and avg_internet < 30:
         recommendations.append(f"📻 **COMMUNITY ENGAGEMENT**: High radio access ({avg_radio:.1f}%) shows good media reach. Use radio for digital awareness campaigns and promote internet adoption through community radio programs.")
@@ -4807,11 +4807,11 @@ def main():
                         'impact': f"Improve to 60% coverage, connecting {int((60-avg_telephone) * total_population / 100):,} households."
                     })
                 
-                # Priority 5: Leverage Existing Infrastructure
+                # Priority 5: Utilize Existing Infrastructure
                 if avg_tv > 60 and avg_internet < 40:
                     recommendations.append({
                         'priority': '🟢 OPPORTUNITY',
-                        'area': 'Infrastructure Leverage',
+                        'area': 'Infrastructure Utilization',
                         'prescription': f"**Strategic Advantage**: High TV penetration ({avg_tv:.1f}%) shows good cable infrastructure. Partner with cable operators to deliver internet via HFC (Hybrid Fiber-Coaxial). Can reach 50% internet coverage quickly.",
                         'impact': f"Fast-track internet deployment using existing cables. Save NPR {total_population * 0.2:.0f}M in infrastructure costs."
                     })
@@ -4866,7 +4866,7 @@ def main():
                     recommendations.append({
                         'priority': '📅 HISTORICAL',
                         'area': '2011 Context',
-                        'prescription': f"In 2011, mobile revolution underway. Key actions: Deploy 3G networks, expand mobile coverage, introduce smartphones, start digital literacy programs. Leverage mobile-first approach.",
+                        'prescription': f"In 2011, mobile revolution underway. Key actions: Deploy 3G networks, expand mobile coverage, introduce smartphones, start digital literacy programs. Utilize mobile-first approach.",
                         'impact': f"Transition phase - mobile becomes primary internet access method."
                     })
                 elif selected_year_rec == 2021:
